@@ -1,0 +1,7 @@
+{
+    "host": "localhost",
+    "user": "root",
+    "password": "root_password",
+    "db": "salon_db",
+    "charset": "utf8mb4"
+}
