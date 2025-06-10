@@ -4,8 +4,7 @@
     exit
     mysql -u root -p salon_db < salon_db.sql
 
-2.  install python 3.9 or above than execute:
-    pip install -r requirements.txt
-
-3.  modify DB account & password at:
+2.  modify DB account & password at:
     db_config.json
+
+3.  run ~/dist/salon_app.exe
