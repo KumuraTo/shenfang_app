@@ -18,6 +18,25 @@ def show_info_popup(title, info):
     popup.transient()  # 讓彈窗浮在主視窗上
     popup.grab_set()   # 模態視窗
 
+def warn_below_safe_stock(conn, product_num):
+    """Show warning if product stock falls below its safe level."""
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT sv.stock_quantity, p.safe_stock, p.product_name
+        FROM stock_view sv
+        JOIN product p ON sv.product_num = p.product_num
+        WHERE sv.product_num = %s
+        """,
+        (product_num,)
+    )
+    row = cur.fetchone()
+    if row and row[0] < row[1]:
+        messagebox.showwarning(
+            "存量警告",
+            f"商品 {row[2]} 存量({row[0]})低於安全庫存({row[1]})，請盡速補貨",
+        )
+
 class LoginFrame(tk.Frame): 
     def __init__(self, master, switch_frame, conn):
         super().__init__(master)
@@ -467,6 +486,19 @@ class OrderAddFrame(tk.Frame):
         self.load_customers()
         self.load_products()
 
+    def refresh(self):
+        """Reload combobox data and clear current selections."""
+        self.load_customers()
+        self.load_products()
+        self.cust_combo.set('')
+        self.product_combo.set('')
+        self.qty_entry.delete(0, tk.END)
+        self.price_var.set('')
+        self.subtotal_var.set('')
+        self.selected_items.clear()
+        self.refresh_items()
+        self.total_var.set('0')
+
     def load_customers(self):
         cur = self.conn.cursor()
         cur.execute("SELECT cust_name FROM customer")
@@ -562,15 +594,21 @@ class OrderAddFrame(tk.Frame):
             order_num = cur.lastrowid
 
             # 新增order_recipe
+            prod_nums = []
             for item in items:
                 cur.execute("SELECT product_num FROM product WHERE product_name=%s", (item["product"],))
                 prod_row = cur.fetchone()
                 if not prod_row:
                     raise Exception("查無商品")
                 prod_num = prod_row[0]
-                cur.execute("INSERT INTO order_receipt (order_num, product_num, quantity, price, sum) VALUES (%s, %s, %s, %s, %s)",
-                            (order_num, prod_num, item["qty"], item["price"], item["subtotal"]))
+                prod_nums.append(prod_num)
+                cur.execute(
+                    "INSERT INTO order_receipt (order_num, product_num, quantity, price, sum) VALUES (%s, %s, %s, %s, %s)",
+                    (order_num, prod_num, item["qty"], item["price"], item["subtotal"]),
+                )
             self.conn.commit()
+            for pn in prod_nums:
+                warn_below_safe_stock(self.conn, pn)
             messagebox.showinfo("成功", "訂單新增成功！")
             self.selected_items.clear()
             self.refresh_items()
@@ -579,6 +617,19 @@ class OrderAddFrame(tk.Frame):
         except Exception as e:
             self.conn.rollback()
             messagebox.showerror("新增失敗", str(e))
+
+    def refresh(self):
+        """Reload combobox data and clear current selections."""
+        self.load_customers()
+        self.load_products()
+        self.cust_combo.set('')
+        self.product_combo.set('')
+        self.qty_entry.delete(0, tk.END)
+        self.price_var.set('')
+        self.subtotal_var.set('')
+        self.selected_items.clear()
+        self.refresh_items()
+        self.total_var.set('0')
 
 class OrderQueryFrame(tk.Frame):
     def __init__(self, master, switch_frame, conn):
@@ -617,6 +668,13 @@ class OrderQueryFrame(tk.Frame):
 
         # 載入下拉選單資料
         self.load_comboboxes()
+
+    def refresh(self):
+        """Reload combobox data and clear selections."""
+        self.load_comboboxes()
+        self.cust_combo.set('')
+        self.date_combo.set('')
+        self.product_combo.set('')
 
     def load_comboboxes(self):
         # 載入顧客
@@ -757,6 +815,15 @@ class OrderModFrame(tk.Frame):
 
         self.load_customers()
         self.load_products()
+
+    def refresh(self):
+        """Reload dropdown values and clear selections."""
+        self.load_customers()
+        self.load_products()
+        self.cust_combo.set('')
+        self.date_combo.set('')
+        self.order_combo.set('')
+        self.clear_items()
 
     def load_customers(self):
         cur = self.conn.cursor()
@@ -963,6 +1030,14 @@ class OrderDeleteFrame(tk.Frame):
                   command=self.delete_order).place(relx=0.83, rely=0.9)
 
         self.load_customers()
+
+    def refresh(self):
+        """Reload combobox data and clear selections."""
+        self.load_customers()
+        self.cust_combo.set('')
+        self.date_combo.set('')
+        self.order_combo.set('')
+        self.clear_items()
 
     def load_customers(self):
         cur = self.conn.cursor()
@@ -2083,12 +2158,16 @@ class PurchaseAddFrame(tk.Frame):
         purchase_num = cur.lastrowid
 
         # 寫入 purchase_receipt 明細
+        prod_nums = []
         for item in self.selected_items:
+            prod_nums.append(item["product_num"])
             cur.execute(
                 "INSERT INTO purchase_receipt (purchase_number, product_num, quantity, cost, sum) VALUES (%s, %s, %s, %s, %s)",
                 (purchase_num, item["product_num"], item["qty"], item["cost"], item["subtotal"])
             )
         self.conn.commit()
+        for pn in prod_nums:
+            warn_below_safe_stock(self.conn, pn)
         messagebox.showinfo("完成", f"已新增進貨單（編號 {purchase_num}）")
         # 重置
         self.selected_items = []
@@ -2748,8 +2827,15 @@ class StockQueryFrame(tk.Frame):
             messagebox.showerror("錯誤", "請選擇商品")
             return
         cur = self.conn.cursor()
-        # 假設 stock_view 有 product_num, product_name, stock, stock_value
-        cur.execute("SELECT product_num, product_name, stock_quantity, stock_value FROM stock_view WHERE product_name=%s", (prod_name,))
+        cur.execute(
+            """
+            SELECT sv.product_num, sv.product_name, sv.stock_quantity, sv.stock_value, p.safe_stock
+            FROM stock_view sv
+            JOIN product p ON sv.product_num = p.product_num
+            WHERE sv.product_name=%s
+            """,
+            (prod_name,)
+        )
         row = cur.fetchone()
         if not row:
             messagebox.showinfo("查無資料", "資料庫中沒有該商品存貨資訊")
@@ -2759,18 +2845,24 @@ class StockQueryFrame(tk.Frame):
             f"商品編號：{row[0]}\n"
             f"商品名稱：{row[1]}\n"
             f"商品存量：{row[2]}\n"
+            f"安全庫存：{row[4]}\n"
             f"庫存價值：{row[3]}"
         )
         # 如果你有 show_info_popup，可以這樣呼叫：
         show_info_popup("商品存貨資訊", info)
         # 否則用 messagebox:
         #messagebox.showinfo("商品存貨資訊", info)
+        if row[2] < row[4]:
+            messagebox.showwarning(
+                "存量警告",
+                f"商品存量({row[2]})低於安全庫存({row[4]})，請盡速補貨",
+            )
 
 
-    def __init__(self, master, switch_frame, conn):
+    '''def __init__(self, master, switch_frame, conn):
         super().__init__(master)
         tk.Label(self, text="存貨修改", font=('Microsoft YaHei',36)).pack(pady=90)
-        tk.Button(self, text="返回上一頁", font=('Microsoft YaHei', 12), command=lambda: switch_frame("stock_menu")).place(x=5, y=5)
+        tk.Button(self, text="返回上一頁", font=('Microsoft YaHei', 12), command=lambda: switch_frame("stock_menu")).place(x=5, y=5)'''
 
 class App(tk.Tk):
     def __init__(self, conn):
