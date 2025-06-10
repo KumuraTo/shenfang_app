@@ -3,6 +3,8 @@ from tkinter import ttk, messagebox, filedialog
 from tkcalendar import DateEntry
 import pymysql
 import pandas as pd
+import json
+import sys, os
 
 def show_info_popup(title, info):
     popup = tk.Toplevel()
@@ -36,6 +38,13 @@ def warn_below_safe_stock(conn, product_num):
             "存量警告",
             f"商品 {row[2]} 存量({row[0]})低於安全庫存({row[1]})，請盡速補貨",
         )
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 class LoginFrame(tk.Frame): 
     def __init__(self, master, switch_frame, conn):
@@ -618,19 +627,6 @@ class OrderAddFrame(tk.Frame):
             self.conn.rollback()
             messagebox.showerror("新增失敗", str(e))
 
-    def refresh(self):
-        """Reload combobox data and clear current selections."""
-        self.load_customers()
-        self.load_products()
-        self.cust_combo.set('')
-        self.product_combo.set('')
-        self.qty_entry.delete(0, tk.END)
-        self.price_var.set('')
-        self.subtotal_var.set('')
-        self.selected_items.clear()
-        self.refresh_items()
-        self.total_var.set('0')
-
 class OrderQueryFrame(tk.Frame):
     def __init__(self, master, switch_frame, conn):
         super().__init__(master)
@@ -968,12 +964,23 @@ class OrderModFrame(tk.Frame):
             # 刪除舊明細
             cur.execute("DELETE FROM order_receipt WHERE order_num=%s", (order_num,))
             # 新增新明細
+            prod_nums = []
             for item in self.selected_items:
-                cur.execute("""
+                cur.execute("SELECT product_num FROM product WHERE product_name=%s", (item["product"],))
+                prod_row = cur.fetchone()
+                prod_num = prod_row[0] if prod_row else None
+                prod_nums.append(prod_num)
+                cur.execute(
+                    """
                     INSERT INTO order_receipt (order_num, product_num, quantity, price, sum)
-                    VALUES (%s, (SELECT product_num FROM product WHERE product_name=%s), %s, %s, %s)
-                """, (order_num, item["product"], item["qty"], item["price"], item["subtotal"]))
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (order_num, prod_num, item["qty"], item["price"], item["subtotal"]),
+                )
             self.conn.commit()
+            for pn in prod_nums:
+                if pn:
+                    warn_below_safe_stock(self.conn, pn)
             messagebox.showinfo("成功", "訂單已成功修改！")
         except Exception as e:
             self.conn.rollback()
@@ -2448,7 +2455,9 @@ class PurchaseModFrame(tk.Frame):
         # 刪除原明細
         cur.execute("DELETE FROM purchase_receipt WHERE purchase_number=%s", (purchase_num,))
         # 新增明細
+        prod_nums = []
         for item in self.selected_items:
+            prod_nums.append(item["product_num"])
             cur.execute(
                 "INSERT INTO purchase_receipt (purchase_number, product_num, quantity, cost, sum) VALUES (%s, %s, %s, %s, %s)",
                 (purchase_num, item["product_num"], item["qty"], item["cost"], item["subtotal"])
@@ -2459,6 +2468,8 @@ class PurchaseModFrame(tk.Frame):
             (date_str, total, purchase_num)
         )
         self.conn.commit()
+        for pn in prod_nums:
+            warn_below_safe_stock(self.conn, pn)
         messagebox.showinfo("完成", f"已修改進貨單（編號 {purchase_num}）")
         self.selected_items = []
         self.refresh_items()
@@ -2937,12 +2948,10 @@ class App(tk.Tk):
 
 if __name__ == "__main__":
     import pymysql
-    conn = pymysql.connect(
-        host="localhost",
-        user="root",
-        password="Kumura_To_71",
-        db="salon_db",
-        charset="utf8mb4")
+    config_path = resource_path('db_config.json')
+    with open(config_path, "r", encoding="utf-8") as f:
+        db_conf = json.load(f)
+    conn = pymysql.connect(**db_conf)
 
     app = App(conn)
     app.mainloop()
