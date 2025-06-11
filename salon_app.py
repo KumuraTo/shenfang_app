@@ -187,6 +187,12 @@ class UserAddFrame(tk.Frame):
         except Exception as e:
             messagebox.showerror("資料庫錯誤", str(e))
 
+    def refresh(self):
+        self.acc_entry.delete(0, tk.END)
+        self.pw_entry.delete(0, tk.END)
+        self.name_entry.delete(0, tk.END)
+        self.type_combo.set("")
+
 class UserQueryFrame(tk.Frame):
     def __init__(self, master, switch_frame, conn):
         super().__init__(master)
@@ -745,6 +751,18 @@ class OrderQueryFrame(tk.Frame):
         text.config(state=tk.DISABLED)
         text.pack(expand=True, fill="both", padx=15, pady=15)
 
+    def refresh(self):
+        self.load_comboboxes()
+        self.cust_combo.set('')
+        self.date_combo.set('')
+        self.product_combo.set('')
+
+    def refresh(self):
+        self.load_comboboxes()
+        self.cust_combo.set('')
+        self.date_combo.set('')
+        self.product_combo.set('')
+
 class OrderModFrame(tk.Frame):
     def __init__(self, master, switch_frame, conn):
         super().__init__(master)
@@ -1196,6 +1214,11 @@ class CustomerAddFrame(tk.Frame):
             self.conn.rollback()
             messagebox.showerror("資料庫錯誤", f"無法新增顧客：{e}")
 
+    def refresh(self):
+        self.name_entry.delete(0, tk.END)
+        self.addr_entry.delete(0, tk.END)
+        self.phone_entry.delete(0, tk.END)
+
 class CustomerQueryFrame(tk.Frame):
     def __init__(self, master, switch_frame, conn):
         super().__init__(master)
@@ -1440,6 +1463,14 @@ class ProductAddFrame(tk.Frame):
             self.supplier_combo.set('')
         except Exception as e:
             messagebox.showerror("新增失敗", f"錯誤原因：{e}")
+
+    def refresh(self):
+        self.load_suppliers()
+        self.product_name_entry.delete(0, tk.END)
+        self.price_entry.delete(0, tk.END)
+        self.cost_entry.delete(0, tk.END)
+        self.safe_stock_entry.delete(0, tk.END)
+        self.supplier_combo.set('')
 
 class ProductQueryFrame(tk.Frame):
     def __init__(self, master, switch_frame, conn):
@@ -1789,6 +1820,12 @@ class SupplierAddFrame(tk.Frame):
         self.conn.commit()
         messagebox.showinfo("新增成功", f"已成功新增供應商：{com}")
         # 清空欄位
+        self.entry_com.delete(0, tk.END)
+        self.entry_address.delete(0, tk.END)
+        self.entry_phone.delete(0, tk.END)
+        self.entry_name.delete(0, tk.END)
+
+    def refresh(self):
         self.entry_com.delete(0, tk.END)
         self.entry_address.delete(0, tk.END)
         self.entry_phone.delete(0, tk.END)
@@ -2185,6 +2222,16 @@ class PurchaseAddFrame(tk.Frame):
         self.product_combo.set("")
         self.total_var.set(0)
 
+    def refresh(self):
+        self.load_products()
+        self.selected_items = []
+        self.refresh_items()
+        self.qty_entry.delete(0, tk.END)
+        self.cost_var.set("")
+        self.subtotal_var.set("")
+        self.product_combo.set("")
+        self.total_var.set(0)
+
 class PurchaseQueryFrame(tk.Frame):
     def __init__(self, master, switch_frame, conn):
         super().__init__(master)
@@ -2269,11 +2316,12 @@ class PurchaseQueryFrame(tk.Frame):
     def show_info_popup(self, title, info):
         popup = tk.Toplevel(self)
         popup.title(title)
-        popup.geometry("600x400")
+        popup.geometry("720x480")
         text = tk.Text(popup, font=('Microsoft YaHei', 14))
         text.pack(expand=True, fill=tk.BOTH)
         text.insert(tk.END, info)
         text.config(state=tk.DISABLED)
+
     def refresh(self):
         self.load_dates()
         self.load_products()
@@ -2794,6 +2842,12 @@ class SalesQueryFrame(tk.Frame):
         text.config(state=tk.DISABLED)
         text.pack(expand=True, fill="both", padx=15, pady=15)
 
+    def refresh(self):
+        self.load_comboboxes()
+        self.cust_combo.set('')
+        self.date_combo.set('')
+        self.product_combo.set('')
+
 class StockMenuFrame(tk.Frame):
     def __init__(self, master, switch_frame):
         super().__init__(master)
@@ -2869,11 +2923,9 @@ class StockQueryFrame(tk.Frame):
                 f"商品存量({row[2]})低於安全庫存({row[4]})，請盡速補貨",
             )
 
-
-    '''def __init__(self, master, switch_frame, conn):
-        super().__init__(master)
-        tk.Label(self, text="存貨修改", font=('Microsoft YaHei',36)).pack(pady=90)
-        tk.Button(self, text="返回上一頁", font=('Microsoft YaHei', 12), command=lambda: switch_frame("stock_menu")).place(x=5, y=5)'''
+    def refresh(self):
+        self.load_products()
+        self.product_combo.set('')
 
 class App(tk.Tk):
     def __init__(self, conn):
