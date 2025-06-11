@@ -2948,7 +2948,13 @@ class App(tk.Tk):
 
 if __name__ == "__main__":
     import pymysql
-    config_path = resource_path('db_config.json')
+    if getattr(sys, 'frozen', False):
+    # 打包後
+        config_path = os.path.join(os.path.dirname(sys.executable), "db_config.json")
+    else:
+    # 開發階段
+        config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "db_config.json")
+        
     with open(config_path, "r", encoding="utf-8") as f:
         db_conf = json.load(f)
     conn = pymysql.connect(**db_conf)
