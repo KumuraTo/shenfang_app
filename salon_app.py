@@ -1211,13 +1211,25 @@ class CustomerAddFrame(tk.Frame):
 
         try:
             cur = self.conn.cursor()
-            # 檢查顧客是否已存在
-            cur.execute("SELECT cust_num FROM customer WHERE cust_name=%s", (name,))
-            if cur.fetchone():
-                if not messagebox.askyesno("提醒", "已有相同供應商存在，是否仍要新增？"):
+            # 檢查是否已有同名且同地址的顧客
+            cur.execute(
+                "SELECT cust_num, cust_name, cust_address, cust_phone FROM customer WHERE cust_name=%s AND cust_address=%s",
+                (name, addr),
+            )
+            dup = cur.fetchone()
+            if dup:
+                info = (
+                    f"顧客編號：{dup[0]}\n"
+                    f"顧客名稱：{dup[1]}\n"
+                    f"顧客地址：{dup[2]}\n"
+                    f"顧客電話：{dup[3]}"
+                )
+                if messagebox.askyesno("提醒", f"已有相同顧客存在：\n{info}\n是否要前往修改資料？"):
+                    self.switch_frame("customer_mod")
+                else:
                     messagebox.showinfo("提示", "請重新新增顧客")
                     self.switch_frame("customer_menu")
-                    return
+                return
             cur.execute(
                 "INSERT INTO customer (cust_name, cust_address, cust_phone) VALUES (%s, %s, %s)",
                 (name, addr, phone),
@@ -1391,6 +1403,7 @@ class ProductAddFrame(tk.Frame):
     def __init__(self, master, switch_frame, conn):
         super().__init__(master)
         self.conn = conn
+        self.switch_frame = switch_frame
 
         tk.Button(self, text="返回上一頁", font=("Microsoft YaHei", 16),
                   command=lambda: switch_frame("product_menu")).place(x=20, y=20)
@@ -1454,7 +1467,6 @@ class ProductAddFrame(tk.Frame):
         except ValueError:
             messagebox.showwarning("輸入錯誤", "單價、成本和安全庫存必須是數字")
             return
-
         # 查找 supplier 對應的 sup_num
         cur = self.conn.cursor()
         cur.execute("SELECT sup_num FROM supplier WHERE sup_com=%s", (supplier,))
@@ -1466,11 +1478,29 @@ class ProductAddFrame(tk.Frame):
 
         # 檢查是否已有相同商品(名稱與供應商皆相同)
         cur.execute(
-            "SELECT 1 FROM product WHERE product_name=%s AND supplier=%s",
+            """
+            SELECT p.product_num, p.product_name, p.price, p.cost, p.safe_stock, s.sup_com
+            FROM product p
+            LEFT JOIN supplier s ON p.supplier = s.sup_num
+            WHERE p.product_name=%s AND p.supplier=%s
+            """,
             (name, sup_num),
         )
-        if cur.fetchone():
-            messagebox.showwarning("新增失敗", "已有相同商品存在")
+        dup = cur.fetchone()
+        if dup:
+            info = (
+                f"商品編號：{dup[0]}\n"
+                f"商品名稱：{dup[1]}\n"
+                f"單價：{dup[2]}\n"
+                f"成本：{dup[3]}\n"
+                f"安全庫存：{dup[4]}\n"
+                f"供應商：{dup[5]}"
+            )
+            if messagebox.askyesno("提醒", f"已有相同商品存在：\n{info}\n是否要前往修改資料？"):
+                self.switch_frame("product_mod")
+            else:
+                messagebox.showinfo("提示", "請重新新增商品")
+                self.switch_frame("product_menu")
             return
 
         # 寫入資料庫
@@ -1841,13 +1871,26 @@ class SupplierAddFrame(tk.Frame):
             messagebox.showwarning("資料不足", "請填寫完整公司與聯絡人名稱")
             return
         cur = self.conn.cursor()
-        # Check for existing supplier with the same company and address
+        # 檢查是否已有相同供應商(公司與地址皆相同)
         cur.execute(
-            "SELECT sup_num FROM supplier WHERE sup_com=%s AND sup_address=%s",
+            "SELECT sup_num, sup_com, sup_address, sup_phone, sup_name FROM supplier "
+            "WHERE sup_com=%s AND sup_address=%s",
             (com, address),
         )
-        if cur.fetchone():
-            messagebox.showinfo("新增失敗", "已有相同供應商存在")
+        dup = cur.fetchone()
+        if dup:
+            info = (
+                f"供應商編號：{dup[0]}\n"
+                f"公司名稱：{dup[1]}\n"
+                f"公司地址：{dup[2]}\n"
+                f"公司電話：{dup[3]}\n"
+                f"聯絡人名稱：{dup[4]}"
+            )
+            if messagebox.askyesno("提醒", f"已有相同供應商存在：\n{info}\n是否要前往修改資料？"):
+                self.switch_frame("supplier_mod")
+            else:
+                messagebox.showinfo("提示", "請重新新增供應商")
+                self.switch_frame("supplier_menu")
             return
 
         sql = (
