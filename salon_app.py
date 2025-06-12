@@ -176,8 +176,16 @@ class UserAddFrame(tk.Frame):
 
         cur = self.conn.cursor()
         try:
-            cur.execute("INSERT INTO user (user_accont, password, name, user_type) VALUES (%s, %s, %s, %s)",
-                        (acc, pw, name, user_type))
+            # 檢查是否已有相同帳號
+            cur.execute("SELECT COUNT(*) FROM user WHERE user_accont=%s", (acc,))
+            if cur.fetchone()[0] > 0:
+                messagebox.showwarning("警告", "已有相同帳號存在")
+                return
+
+            cur.execute(
+                "INSERT INTO user (user_accont, password, name, user_type) VALUES (%s, %s, %s, %s)",
+                (acc, pw, name, user_type),
+            )
             self.conn.commit()
             messagebox.showinfo("成功", "已新增使用者！")
             self.acc_entry.delete(0, tk.END)
@@ -1203,8 +1211,17 @@ class CustomerAddFrame(tk.Frame):
 
         try:
             cur = self.conn.cursor()
-            cur.execute("INSERT INTO customer (cust_name, cust_address, cust_phone) VALUES (%s, %s, %s)",
-                        (name, addr, phone))
+            # 檢查顧客是否已存在
+            cur.execute("SELECT cust_num FROM customer WHERE cust_name=%s", (name,))
+            if cur.fetchone():
+                if not messagebox.askyesno("提醒", "已有相同供應商存在，是否仍要新增？"):
+                    messagebox.showinfo("提示", "請重新新增顧客")
+                    self.switch_frame("customer_menu")
+                    return
+            cur.execute(
+                "INSERT INTO customer (cust_name, cust_address, cust_phone) VALUES (%s, %s, %s)",
+                (name, addr, phone),
+            )
             self.conn.commit()
             messagebox.showinfo("新增成功", f"已新增顧客：{name}")
             self.name_entry.delete(0, tk.END)
@@ -1446,6 +1463,15 @@ class ProductAddFrame(tk.Frame):
             messagebox.showerror("供應商錯誤", "找不到對應的供應商")
             return
         sup_num = sup_num[0]
+
+        # 檢查是否已有相同商品(名稱與供應商皆相同)
+        cur.execute(
+            "SELECT 1 FROM product WHERE product_name=%s AND supplier=%s",
+            (name, sup_num),
+        )
+        if cur.fetchone():
+            messagebox.showwarning("新增失敗", "已有相同商品存在")
+            return
 
         # 寫入資料庫
         try:
@@ -1815,7 +1841,19 @@ class SupplierAddFrame(tk.Frame):
             messagebox.showwarning("資料不足", "請填寫完整公司與聯絡人名稱")
             return
         cur = self.conn.cursor()
-        sql = "INSERT INTO supplier (sup_com, sup_address, sup_phone, sup_name) VALUES (%s, %s, %s, %s)"
+        # Check for existing supplier with the same company and address
+        cur.execute(
+            "SELECT sup_num FROM supplier WHERE sup_com=%s AND sup_address=%s",
+            (com, address),
+        )
+        if cur.fetchone():
+            messagebox.showinfo("新增失敗", "已有相同供應商存在")
+            return
+
+        sql = (
+            "INSERT INTO supplier (sup_com, sup_address, sup_phone, sup_name) "
+            "VALUES (%s, %s, %s, %s)"
+        )
         cur.execute(sql, (com, address, phone, name))
         self.conn.commit()
         messagebox.showinfo("新增成功", f"已成功新增供應商：{com}")
